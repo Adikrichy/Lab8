@@ -45,4 +45,24 @@ class MainActivity : AppCompatActivity() {
         super.onStop()
         unregisterReceiver(broadcastReceiver)
     }
+
+    private lateinit var serviceIntent: Intent
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+        serviceIntent = Intent(this, MyService::class.java)
+    }
+
+    fun startService(view: View) {
+        ContextCompat.startForegroundService(this, serviceIntent)
+    }
+
+    fun stopService(view: View) {
+        stopService(serviceIntent)
+    }
+
+    fun nextActivity(view: View) {
+        startActivity(Intent(this, MainActivity2::class.java))
+    }
 }
