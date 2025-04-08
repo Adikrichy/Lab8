@@ -1,58 +1,110 @@
 package com.example.myapplication8
-
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.Service
 import android.content.Intent
-import android.media.MediaPlayer
+import android.media.AudioManager
+import android.media.ToneGenerator
 import android.os.Build
+import android.os.IBinder
+import android.util.Log
 import android.widget.Toast
 import androidx.core.app.NotificationCompat
-import androidx.core.app.ServiceCompat.START_STICKY
-import androidx.core.app.ServiceCompat.startForeground
-import androidx.core.content.ContextCompat.getSystemService
-import java.security.Provider
 
-class MyService : Provider.Service() {
-    private lateinit var soundPlayer: MediaPlayer
+
+class MyService : Service() {
+    private var toneGenerator: ToneGenerator? = null
     private val CHANNEL_ID = "channelId"
+    private var notifManager: NotificationManager? = null
+    private var isPlaying = false
 
     override fun onCreate() {
         super.onCreate()
-        Toast.makeText(this, "Service Created", Toast.LENGTH_SHORT).show()
-        soundPlayer = MediaPlayer.create(this, R.raw.song).apply {
-            isLooping = false
+        try {
+            Log.d(TAG, "onCreate: Создание сервиса")
+            toneGenerator = ToneGenerator(AudioManager.STREAM_MUSIC, 100)
+            Log.d(TAG, "onCreate: ToneGenerator создан успешно")
+        } catch (e: Exception) {
+            Log.e(TAG, "onCreate: Ошибка", e)
+            Toast.makeText(this, "Ошибка: " + e.message, Toast.LENGTH_SHORT).show()
         }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Toast.makeText(this, "Service Started", Toast.LENGTH_SHORT).show()
-        createNotificationChannel()
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_music)
-            .setContentTitle("My Music Player")
-            .setContentText("Music is playing")
-            .build()
-        startForeground(1, notification)
-        soundPlayer.start()
+    @SuppressLint("ForegroundServiceType")
+    override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
+        try {
+            Log.d(TAG, "onStartCommand: Запуск сервиса")
+            createNotificationChannel()
+
+            val sNotifBuilder: NotificationCompat.Builder =
+                NotificationCompat.Builder(this, CHANNEL_ID)
+                    .setSmallIcon(R.drawable.is_music)
+                    .setContentTitle("Мой музыкальный плеер")
+                    .setContentText("Проигрывается звук")
+                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+
+            val servNotification = sNotifBuilder.build()
+            startForeground(1, servNotification)
+
+            if (toneGenerator != null && !isPlaying) {
+                Log.d(TAG, "onStartCommand: Начинаем воспроизведение")
+                isPlaying = true
+                // Запускаем звук в отдельном потоке
+                Thread {
+                    while (isPlaying) {
+                        toneGenerator!!.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 1000)
+                        try {
+                            Thread.sleep(1100) // Небольшая пауза между повторами
+                        } catch (e: InterruptedException) {
+                            break
+                        }
+                    }
+                }.start()
+            } else {
+                Log.e(TAG, "onStartCommand: ToneGenerator не готов")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "onStartCommand: Ошибка", e)
+            Toast.makeText(this, "Ошибка: " + e.message, Toast.LENGTH_SHORT).show()
+            stopSelf()
+        }
         return START_STICKY
     }
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Service Channel",
-                NotificationManager.IMPORTANCE_DEFAULT
-            ).apply { description = "Music Channel" }
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+            val channelName = "Канал сервиса"
+            val channelDescription = "Музыкальный канал"
+            val importance = NotificationManager.IMPORTANCE_DEFAULT
+
+            val channel = NotificationChannel(CHANNEL_ID, channelName, importance)
+            channel.description = channelDescription
+
+            notifManager = getSystemService(NotificationManager::class.java)
+            if (notifManager != null) {
+                notifManager!!.createNotificationChannel(channel)
+                Log.d(TAG, "createNotificationChannel: Канал создан")
+            }
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Toast.makeText(this, "Service Stopped", Toast.LENGTH_SHORT).show()
-        soundPlayer.stop()
+        Log.d(TAG, "onDestroy: Остановка сервиса")
+        isPlaying = false
+        if (toneGenerator != null) {
+            toneGenerator!!.release()
+            toneGenerator = null
+            Log.d(TAG, "onDestroy: ToneGenerator освобожден")
+        }
     }
 
-    override fun onBind(intent: Intent?): IBinder? = null
+    override fun onBind(intent: Intent): IBinder? {
+        return null
+    }
+
+    companion object {
+        private const val TAG = "MyService"
+    }
 }
